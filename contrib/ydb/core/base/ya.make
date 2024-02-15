@@ -107,6 +107,10 @@ PEERDIR(
 )
 ENDIF()
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()
 
 RECURSE_FOR_TESTS(

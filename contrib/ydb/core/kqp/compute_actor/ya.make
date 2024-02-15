@@ -30,4 +30,8 @@ PEERDIR(
 GENERATE_ENUM_SERIALIZATION(kqp_compute_state.h)
 YQL_LAST_ABI_VERSION()
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()

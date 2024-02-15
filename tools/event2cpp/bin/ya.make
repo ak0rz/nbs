@@ -18,4 +18,8 @@ SRCS(
 
 INCLUDE(${ARCADIA_ROOT}/build/prebuilt/tools/event2cpp/ya.make.induced_deps)
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()

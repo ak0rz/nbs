@@ -39,6 +39,7 @@ CFLAGS(
     -fno-exceptions
     -fno-rtti
     -funwind-tables
+    -Wno-unused-but-set-variable
 )
 
 IF (SANITIZER_TYPE == memory)

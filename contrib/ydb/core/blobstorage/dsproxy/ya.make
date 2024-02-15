@@ -69,6 +69,10 @@ PEERDIR(
     contrib/ydb/core/util
 )
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()
 
 RECURSE(

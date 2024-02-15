@@ -57,4 +57,8 @@ SRCS(
     simple_arrays_cache.cpp
 )
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()

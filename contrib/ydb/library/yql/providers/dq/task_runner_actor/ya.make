@@ -16,4 +16,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()

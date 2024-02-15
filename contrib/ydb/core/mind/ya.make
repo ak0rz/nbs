@@ -71,6 +71,10 @@ PEERDIR(
     contrib/ydb/core/tx/schemeshard
 )
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()
 
 RECURSE(

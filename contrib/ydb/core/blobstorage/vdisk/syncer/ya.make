@@ -49,6 +49,10 @@ SRCS(
     syncer_job_task.h
 )
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()
 
 RECURSE_FOR_TESTS(

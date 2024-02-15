@@ -98,6 +98,10 @@ PEERDIR(
     contrib/ydb/core/tablet_flat
 )
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()
 
 RECURSE_FOR_TESTS(

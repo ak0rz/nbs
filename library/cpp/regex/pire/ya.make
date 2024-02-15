@@ -28,6 +28,10 @@ PEERDIR(
     library/cpp/charset
 )
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()
 
 RECURSE_FOR_TESTS(ut)

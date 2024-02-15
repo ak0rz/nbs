@@ -285,4 +285,8 @@ ELSE()
     )
 ENDIF()
 
+CFLAGS(
+    -Wno-unused-but-set-variable
+)
+
 END()
