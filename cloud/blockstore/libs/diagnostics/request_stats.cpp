@@ -286,6 +286,8 @@ public:
         ui64 requestStarted,
         TDuration postponedTime,
         ui32 requestBytes,
+        ui32 requestVoidBytes,
+        ui32 requestNonVoidBytes,
         EDiagnosticsErrorKind errorKind,
         ui32 errorFlags,
         bool unaligned,
@@ -298,6 +300,8 @@ public:
             requestStarted,
             postponedTime,
             requestBytes,
+            requestVoidBytes,
+            requestNonVoidBytes,
             errorKind,
             errorFlags,
             unaligned,
@@ -311,6 +315,8 @@ public:
                 requestStarted,
                 postponedTime,
                 requestBytes,
+                requestVoidBytes,
+                requestNonVoidBytes,
                 errorKind,
                 errorFlags,
                 unaligned,
@@ -543,6 +549,8 @@ struct TRequestStatsStub final
         ui64 requestStarted,
         TDuration postponedTime,
         ui32 requestBytes,
+        ui32 requestVoidBytes,
+        ui32 requestNonVoidBytes,
         EDiagnosticsErrorKind errorKind,
         ui32 errorFlags,
         bool unaligned,
@@ -553,6 +561,8 @@ struct TRequestStatsStub final
         Y_UNUSED(requestType);
         Y_UNUSED(postponedTime);
         Y_UNUSED(requestBytes);
+        Y_UNUSED(requestVoidBytes);
+        Y_UNUSED(requestNonVoidBytes);
         Y_UNUSED(errorKind);
         Y_UNUSED(errorFlags);
         Y_UNUSED(unaligned);

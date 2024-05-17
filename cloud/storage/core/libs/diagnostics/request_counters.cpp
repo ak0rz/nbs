@@ -224,6 +224,8 @@ struct TRequestCounters::TStatCounters
     TDynamicCounters::TCounterPtr MaxTotalTime;
     TDynamicCounters::TCounterPtr MaxSize;
     TDynamicCounters::TCounterPtr RequestBytes;
+    TDynamicCounters::TCounterPtr RequestVoidBytes;
+    TDynamicCounters::TCounterPtr RequestNonVoidBytes;
     TDynamicCounters::TCounterPtr MaxRequestBytes;
     TDynamicCounters::TCounterPtr InProgress;
     TDynamicCounters::TCounterPtr MaxInProgress;
@@ -328,6 +330,9 @@ struct TRequestCounters::TStatCounters
             MaxCount = counters.GetCounter("MaxCount");
 
             RequestBytes = counters.GetCounter("RequestBytes", true);
+            RequestVoidBytes = counters.GetCounter("RequestVoidBytes", true);
+            RequestNonVoidBytes = counters.GetCounter("RequestNonVoidBytes", true);
+
             MaxRequestBytes = counters.GetCounter("MaxRequestBytes");
 
             InProgressBytes = counters.GetCounter("InProgressBytes");
@@ -710,12 +715,17 @@ TDuration TRequestCounters::RequestCompleted(
     ui64 requestStarted,
     TDuration postponedTime,
     ui32 requestBytes,
+    ui32 requestVoidBytes,
+    ui32 requestNonVoidBytes,
     EDiagnosticsErrorKind errorKind,
     ui32 errorFlags,
     bool unaligned,
     ECalcMaxTime calcMaxTime,
     ui64 responseSent)
 {
+    Y_UNUSED(requestVoidBytes);
+    Y_UNUSED(requestNonVoidBytes);
+
     auto requestCompleted = GetCycleCount();
     auto requestTime = CyclesToDurationSafe(requestCompleted - requestStarted);
     auto requestCompletionTime = responseSent ?

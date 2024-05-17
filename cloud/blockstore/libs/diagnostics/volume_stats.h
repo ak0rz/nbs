@@ -47,6 +47,8 @@ struct IVolumeInfo
         ui64 requestStarted,
         TDuration postponedTime,
         ui32 requestBytes,
+        ui32 requestVoidBytes,
+        ui32 requestNonVoidBytes,
         EDiagnosticsErrorKind errorKind,
         ui32 errorFlags,
         bool unaligned,

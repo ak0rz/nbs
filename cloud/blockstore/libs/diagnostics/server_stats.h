@@ -30,6 +30,8 @@ struct TMetricRequest
     NCloud::NProto::EStorageMediaKind MediaKind
         = NCloud::NProto::STORAGE_MEDIA_HDD;
     ui32 RequestBytes = 0;
+    ui32 RequestVoidBytes = 0;
+    ui32 RequestNonVoidBytes = 0;
     TInstant RequestTimestamp;
     bool Unaligned = false;
 
