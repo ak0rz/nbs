@@ -49,31 +49,6 @@ void ApplyMask(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FillUnencryptedBlockMask(
-    const TBlockMarks& blockMarks,
-    NProto::TReadBlocksResponse& response)
-{
-    if (blockMarks.empty()) {
-        return;
-    }
-
-    TDynBitMap bitmap;
-    for (size_t i = 0; i < blockMarks.size(); ++i) {
-        if (std::holds_alternative<TEmptyMark>(blockMarks[i]) ||
-            std::holds_alternative<TFreshMarkOnBaseDisk>(blockMarks[i]) ||
-            std::holds_alternative<TBlobMarkOnBaseDisk>(blockMarks[i])) {
-            bitmap.Set(i);
-        }
-    }
-
-    auto& blockMask = *response.MutableUnencryptedBlockMask();
-    blockMask.assign(TStringBuf{
-        reinterpret_cast<const char*>(bitmap.GetChunks()),
-        bitmap.Size() / 8});
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TBlockMarks MakeBlockMarks(
     const TCompressedBitmap* usedBlocks,
     TBlockRange64 range)

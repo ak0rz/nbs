@@ -37,7 +37,6 @@ TReadDiskRegistryBasedOverlayActor<TMethod>::TReadDiskRegistryBasedOverlayActor(
         TString baseDiskCheckpointId,
         ui32 blockSize,
         EStorageAccessMode mode,
-        bool replyWithUnencryptedBlockMask,
         TDuration longRunningThreshold)
     : RequestInfo(std::move(requestInfo))
     , VolumeActorId(volumeActorId)
@@ -46,7 +45,6 @@ TReadDiskRegistryBasedOverlayActor<TMethod>::TReadDiskRegistryBasedOverlayActor(
     , BaseDiskId(std::move(baseDiskId))
     , BaseDiskCheckpointId(std::move(baseDiskCheckpointId))
     , BlockSize(blockSize)
-    , ReplyWithUnencryptedBlockMask(replyWithUnencryptedBlockMask)
     , LongRunningThreshold(longRunningThreshold)
     , Mode(mode)
     , OriginalRequest(std::move(originalRequest))
@@ -249,10 +247,6 @@ void TReadDiskRegistryBasedOverlayActor<TMethod>::ReplyAndDie(
     } else {
         ReadHandler->GetResponse(response->Record);
         ApplyMask(BlockMarks, response->Record);
-    }
-
-    if (ReplyWithUnencryptedBlockMask) {
-        FillUnencryptedBlockMask(BlockMarks, response->Record);
     }
 
     NCloud::Reply(ctx, *RequestInfo, std::move(response));

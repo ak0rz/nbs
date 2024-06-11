@@ -96,12 +96,6 @@ NBlobMarkers::TBlockMarks MakeBlockMarks(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FillUnencryptedBlockMask(
-    const NBlobMarkers::TBlockMarks& blockMarks,
-    NProto::TReadBlocksResponse& response);
-
-////////////////////////////////////////////////////////////////////////////////
-
 inline TGuardedSgList GetSglist(const NProto::TReadBlocksLocalRequest& request)
 {
     return request.Sglist;

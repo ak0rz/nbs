@@ -40,7 +40,6 @@ private:
     const TString BaseDiskId;
     const TString BaseDiskCheckpointId;
     const ui32 BlockSize;
-    const bool ReplyWithUnencryptedBlockMask;
     const TDuration LongRunningThreshold;
     const EStorageAccessMode Mode;
 
@@ -65,7 +64,6 @@ public:
         TString baseDiskCheckpointId,
         ui32 blockSize,
         EStorageAccessMode mode,
-        bool replyWithUnencryptedBlockMask,
         TDuration longRunningThreshold);
 
     void Bootstrap(const TActorContext& ctx);

@@ -31,10 +31,6 @@ bool TVolumeActor::SendRequestToPartitionWithUsedBlockTracking(
 
     const auto* msg = ev->Get();
 
-    const auto& volumeConfig = State->GetMeta().GetVolumeConfig();
-    const bool encryptedDiskRegistryBasedDisk =
-        State->IsDiskRegistryMediaKind() &&
-        volumeConfig.GetEncryptionDesc().GetMode() != NProto::NO_ENCRYPTION;
     const bool overlayDiskRegistryBasedDisk =
         State->IsDiskRegistryMediaKind() &&
         !State->GetBaseDiskId().Empty();
@@ -52,7 +48,7 @@ bool TVolumeActor::SendRequestToPartitionWithUsedBlockTracking(
                 std::move(requestInfo),
                 std::move(msg->Record),
                 State->GetBlockSize(),
-                encryptedDiskRegistryBasedDisk || overlayDiskRegistryBasedDisk,
+                overlayDiskRegistryBasedDisk,
                 volumeRequestId,
                 partActorId,
                 TabletID(),
@@ -64,7 +60,6 @@ bool TVolumeActor::SendRequestToPartitionWithUsedBlockTracking(
 
     if constexpr (IsReadMethod<TMethod>) {
         if (State->GetMaskUnusedBlocks() && State->GetUsedBlocks() ||
-            encryptedDiskRegistryBasedDisk ||
             overlayDiskRegistryBasedDisk)
         {
             const TCompressedBitmap* usedBlocks = State->GetUsedBlocks();
@@ -92,7 +87,6 @@ bool TVolumeActor::SendRequestToPartitionWithUsedBlockTracking(
                     State->GetBaseDiskCheckpointId(),
                     State->GetBlockSize(),
                     State->GetStorageAccessMode(),
-                    encryptedDiskRegistryBasedDisk,
                     GetDowntimeThreshold(
                         *DiagnosticsConfig,
                         NProto::STORAGE_MEDIA_SSD));
@@ -106,7 +100,6 @@ bool TVolumeActor::SendRequestToPartitionWithUsedBlockTracking(
                 std::move(msg->Record),
                 State->GetUsedBlocks(),
                 State->GetMaskUnusedBlocks(),
-                encryptedDiskRegistryBasedDisk,
                 partActorId,
                 TabletID(),
                 SelfId());

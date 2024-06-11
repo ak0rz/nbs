@@ -31,7 +31,6 @@ private:
     typename TMethod::TRequest::ProtoRecordType Request;
     NBlobMarkers::TBlockMarks BlockMarks;
     const bool MaskUnusedBlocks;
-    const bool ReplyWithUnencryptedBlockMask;
     const TActorId PartActorId;
     const ui64 VolumeTabletId;
     const TActorId VolumeActorId;
@@ -46,7 +45,6 @@ public:
         typename TMethod::TRequest::ProtoRecordType request,
         const TCompressedBitmap* usedBlocks,
         bool maskUnusedBlocks,
-        bool replyWithUnencryptedBlockMask,
         TActorId partActorId,
         ui64 volumeTabletId,
         TActorId volumeActorId);
@@ -84,7 +82,6 @@ TReadMarkedActor<TMethod>::TReadMarkedActor(
         typename TMethod::TRequest::ProtoRecordType request,
         const TCompressedBitmap* usedBlocks,
         bool maskUnusedBlocks,
-        bool replyWithUnencryptedBlockMask,
         TActorId partActorId,
         ui64 volumeTabletId,
         TActorId volumeActorId)
@@ -96,7 +93,6 @@ TReadMarkedActor<TMethod>::TReadMarkedActor(
             Request.GetStartIndex(),
             Request.GetBlocksCount())))
     , MaskUnusedBlocks(maskUnusedBlocks)
-    , ReplyWithUnencryptedBlockMask(replyWithUnencryptedBlockMask)
     , PartActorId(partActorId)
     , VolumeTabletId(volumeTabletId)
     , VolumeActorId(volumeActorId)
@@ -146,10 +142,6 @@ void TReadMarkedActor<TMethod>::Done(const TActorContext& ctx)
     if (MaskUnusedBlocks) {
         ApplyMask(BlockMarks, Request);
         ApplyMask(BlockMarks, response->Record);
-    }
-
-    if (ReplyWithUnencryptedBlockMask) {
-        FillUnencryptedBlockMask(BlockMarks, response->Record);
     }
 
     GLOBAL_LWTRACK(
