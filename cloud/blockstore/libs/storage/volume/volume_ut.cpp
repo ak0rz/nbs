@@ -8203,6 +8203,113 @@ Y_UNIT_TEST_SUITE(TVolumeTest)
         UNIT_ASSERT(describeRequest);
     }
 
+    Y_UNIT_TEST(ShouldLoadFromResizedOverlayDisk)
+    {
+        auto runtime = PrepareTestActorRuntime();
+
+        TVolumeClient volume(*runtime);
+        volume.UpdateVolumeConfig(
+            0,       // maxBandwidth
+            0,       // maxIops
+            0,       // burstPercentage
+            0,       // maxPostponedWeight
+            false,   // throttlingEnabled
+            1,       // version
+            NCloud::NProto::STORAGE_MEDIA_SSD_NONREPLICATED,
+            1024,              // block count per partition
+            "vol0",            // diskId
+            "cloud",           // cloudId
+            "folder",          // folderId
+            1,                 // partition count
+            2,                 // blocksPerStripe
+            "",                // tags
+            "disk1",           // baseDiskId
+            "ch"               // baseDiskCheckpointId
+        );
+
+        volume.WaitReady();
+
+        auto clientInfo = CreateVolumeClientInfo(
+            NProto::VOLUME_ACCESS_READ_WRITE,
+            NProto::VOLUME_MOUNT_LOCAL,
+            0);
+        volume.AddClient(clientInfo);
+
+        ui8 countOfBlockReadReq = 0;
+        bool configUpdated = false;
+
+        runtime->SetEventFilter(
+            [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event)
+            {
+                switch (event->GetTypeRewrite()) {
+                    case TEvBlockStore::EvUpdateVolumeConfigResponse:
+                        configUpdated = true;
+                        break;
+
+                    case TEvService::TEvReadBlocksRequest::EventType:
+                        ++countOfBlockReadReq;
+                        break;
+                }
+                return false;
+            });
+
+        volume.WriteBlocks(
+            TBlockRange64::WithLength(0, 1024),
+            clientInfo.GetClientId(),
+            1);
+
+        // Read blocks from base disk only
+        volume.ReadBlocks(
+            TBlockRange64::WithLength(0, 1024),
+            clientInfo.GetClientId());
+
+        // resize overlay disk
+        volume.UpdateVolumeConfig(
+            0,       // maxBandwidth
+            0,       // maxIops
+            0,       // burstPercentage
+            0,       // maxPostponedWeight
+            false,   // throttlingEnabled
+            1,       // version
+            NCloud::NProto::STORAGE_MEDIA_SSD_NONREPLICATED,
+            1024 * 15,             // new blocks count for resized disk
+            "vol0",                // diskId
+            "cloud",               // cloudId
+            "folder",              // folderId
+            1,                     // partition count
+            2,                     // blocksPerStripe
+            "",                    // tags
+            "disk1",               // baseDiskId
+            "ch"                   // baseDiskCheckpointId
+        );
+
+        volume.ReallocateDisk();
+        volume.ReconnectPipe();
+        volume.AddClient(clientInfo);
+        volume.WaitReady();
+
+        UNIT_ASSERT_VALUES_EQUAL(countOfBlockReadReq, 2);
+        UNIT_ASSERT_VALUES_EQUAL(configUpdated, true);
+
+        // Read blocks from overlay & base disk
+        // Intersect
+        volume.ReadBlocks(
+            TBlockRange64::WithLength(512, 1024),
+            clientInfo.GetClientId());
+
+        // Not overlaps
+        volume.ReadBlocks(
+            TBlockRange64::WithLength(1024, 1024),
+            clientInfo.GetClientId());
+
+        // Overlaps
+        volume.ReadBlocks(
+            TBlockRange64::WithLength(0, 1024),
+            clientInfo.GetClientId());
+
+        UNIT_ASSERT_VALUES_EQUAL(countOfBlockReadReq, 2 + 6);
+    }
+
     Y_UNIT_TEST(ShouldReportLongRunningForBaseDisk)
     {
         NProto::TStorageServiceConfig storageServiceConfig;
