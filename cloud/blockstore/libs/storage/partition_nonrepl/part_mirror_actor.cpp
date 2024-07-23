@@ -19,6 +19,8 @@ using namespace NActors;
 
 using namespace NKikimr;
 
+using TEvPartition = NPartition::TEvPartition;
+
 LWTRACE_USING(BLOCKSTORE_STORAGE_PROVIDER);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -408,6 +410,39 @@ void TMirrorPartitionActor::HandleChecksumResponse(
     CompareChecksums(ctx);
 }
 
+void TMirrorPartitionActor::HandleEnterIncompleteMirrorRWMode(
+    const TEvPartition::TEvEnterIncompleteMirrorRWModeRequest::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+    if (IncompleteIOReplicaIndex &&
+              IncompleteIOReplicaIndex != msg->ReplicaIndex)
+    {
+        NCloud::Reply(
+            ctx,
+            *ev,
+            std::make_unique<TEvPartition::TEvEnterIncompleteMirrorRWModeResponse>(
+                MakeError(
+                    E_INVALID_STATE,
+                    TStringBuilder()
+                        << "Cant enter incomplete IO mode in replica: "
+                        << msg->ReplicaIndex
+                        << ". Already in incomplete mode with index: "
+                        << *IncompleteIOReplicaIndex)));
+            return;
+    }
+
+    IncompleteIOReplicaIndex = msg->ReplicaIndex;
+
+
+
+    NCloud::Reply(
+        ctx,
+        *ev,
+        std::make_unique<TEvPartition::TEvEnterIncompleteMirrorRWModeResponse>(
+            MakeError(E_NOT_IMPLEMENTED)));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TMirrorPartitionActor::HandleRWClientIdChanged(
@@ -473,7 +508,9 @@ STFUNC(TMirrorPartitionActor::StateWork)
         HFunc(TEvService::TEvReadBlocksLocalRequest, HandleReadBlocksLocal);
         HFunc(TEvService::TEvWriteBlocksLocalRequest, HandleWriteBlocksLocal);
 
-        HFunc(NPartition::TEvPartition::TEvDrainRequest, DrainActorCompanion.HandleDrain);
+        HFunc(TEvPartition::TEvDrainRequest, DrainActorCompanion.HandleDrain);
+        HFunc(TEvPartition::TEvEnterIncompleteMirrorRWModeRequest, HandleEnterIncompleteMirrorRWMode);
+
         HFunc(
             TEvService::TEvGetChangedBlocksRequest,
             GetChangedBlocksCompanion.HandleGetChangedBlocks);

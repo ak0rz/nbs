@@ -70,6 +70,8 @@ private:
 
     NProto::TError Status;
 
+    std::optional<ui32> IncompleteIOReplicaIndex;
+
     bool ScrubbingScheduled = false;
     ui64 ScrubbingRangeId = 0;
     TChecksumRangeActorCompanion ChecksumRangeActorCompanion;
@@ -138,6 +140,11 @@ private:
     void HandleChecksumUndelivery(
         const TEvNonreplPartitionPrivate::TEvChecksumBlocksRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    void HandleEnterIncompleteMirrorRWMode(
+        const NPartition::TEvPartition::TEvEnterIncompleteMirrorRWModeRequest::TPtr&
+            ev,
+        const TActorContext& ctx);
 
     void HandlePoisonPill(
         const NActors::TEvents::TEvPoisonPill::TPtr& ev,
