@@ -1,26 +1,30 @@
 #pragma once
-#include <contrib/ydb/library/actors/core/log.h>
-#include <contrib/ydb/library/actors/core/actor_bootstrapped.h>
-#include <contrib/ydb/library/actors/core/hfunc.h>
-#include <library/cpp/digest/md5/md5.h>
-#include <contrib/ydb/library/ycloud/api/access_service.h>
-#include <contrib/ydb/library/ycloud/api/user_account_service.h>
-#include <contrib/ydb/library/ycloud/api/service_account_service.h>
-#include <contrib/ydb/library/ycloud/impl/user_account_service.h>
-#include <contrib/ydb/library/ycloud/impl/service_account_service.h>
-#include <contrib/ydb/library/ycloud/impl/access_service.h>
-#include <contrib/ydb/library/ycloud/impl/grpc_service_cache.h>
-#include <contrib/ydb/core/base/counters.h>
-#include <contrib/ydb/core/base/domain.h>
-#include <contrib/ydb/core/mon/mon.h>
-#include <contrib/ydb/core/base/appdata.h>
-#include <contrib/ydb/core/base/ticket_parser.h>
-#include <contrib/ydb/library/security/util.h>
-#include <util/string/vector.h>
-#include <util/generic/queue.h>
 #include "ticket_parser_log.h"
 #include "ldap_auth_provider.h"
+
+#include <contrib/ydb/core/base/appdata.h>
+#include <contrib/ydb/core/base/counters.h>
+#include <contrib/ydb/core/base/domain.h>
+#include <contrib/ydb/core/base/ticket_parser.h>
+#include <contrib/ydb/core/mon/mon.h>
+#include <contrib/ydb/library/actors/core/actor_bootstrapped.h>
+#include <contrib/ydb/library/actors/core/hfunc.h>
+#include <contrib/ydb/library/actors/core/log.h>
+#include <contrib/ydb/library/grpc/actor_client/grpc_service_cache.h>
+#include <contrib/ydb/library/ncloud/impl/access_service.h>
+#include <contrib/ydb/library/security/util.h>
+#include <contrib/ydb/library/ycloud/api/access_service.h>
+#include <contrib/ydb/library/ycloud/api/service_account_service.h>
+#include <contrib/ydb/library/ycloud/api/user_account_service.h>
+#include <contrib/ydb/library/ycloud/impl/access_service.h>
+#include <contrib/ydb/library/ycloud/impl/service_account_service.h>
+#include <contrib/ydb/library/ycloud/impl/user_account_service.h>
+
+#include <library/cpp/digest/md5/md5.h>
+
+#include <util/generic/queue.h>
 #include <util/stream/file.h>
+#include <util/string/vector.h>
 
 namespace NKikimr {
 
@@ -57,7 +61,7 @@ private:
 
         TString Subject;
         bool Required = false;
-        TTypeCase SubjectType;
+        TTypeCase SubjectType = TTypeCase::TYPE_NOT_SET;    
         TEvTicketParser::TError Error;
         TStackVec<std::pair<TString, TString>> Attributes;
 
@@ -88,6 +92,9 @@ private:
     using TEvAccessServiceBulkAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvBulkAuthorizeRequest>;
     using TEvAccessServiceGetUserAccountRequest = TEvRequestWithKey<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>;
     using TEvAccessServiceGetServiceAccountRequest = TEvRequestWithKey<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>;
+    using TEvNebiusAccessServiceAuthorizeRequest = TEvRequestWithKey<NNebiusCloud::TEvAccessService::TEvAuthorizeRequest>;
+    using TEvNebiusAccessServiceAuthenticateRequest = TEvRequestWithKey<NNebiusCloud::TEvAccessService::TEvAuthenticateRequest>;
+
 
     struct TTokenRefreshRecord {
         TString Key;
@@ -111,6 +118,7 @@ protected:
         NKikimr::TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature Signature;
         THashMap<TString, TPermissionRecord> Permissions;
         TString Subject; // login
+        typename TPermissionRecord::TTypeCase SubjectType = TPermissionRecord::TTypeCase::TYPE_NOT_SET;
         TEvTicketParser::TError Error;
         TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
         ui64 ResponsesLeft = 0;
@@ -249,6 +257,18 @@ protected:
         return now + ExpireTime;
     }
 
+    bool AccessServiceEnabled() const {
+        return (AccessServiceValidatorV1 && AccessServiceValidatorV2) || NebiusAccessServiceValidator;
+    }
+
+    bool ApiKeyEnabled() const {
+        return AccessServiceValidatorV1 && AccessServiceValidatorV2 && Config.GetUseAccessServiceApiKey();
+    }
+
+    bool IsAccessKeySignatureSupported() const {
+        return AccessServiceValidatorV1 && AccessServiceValidatorV2; // Signature is supported by Yandex AccessService and is not supported by Nebius AccessService
+    }
+
 private:
     TString DomainName;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsReceived;
@@ -274,6 +294,7 @@ private:
     TActorId AccessServiceValidatorV2;
     TActorId UserAccountService;
     TActorId ServiceAccountService;
+    TActorId NebiusAccessServiceValidator;
     TString UserAccountDomain;
     TString AccessServiceDomain;
     TString ServiceDomain;
@@ -359,30 +380,39 @@ private:
         return request;
     }
 
+
+    template <typename TPathsContainerPtr>
+    static void AddResourcePath(TPathsContainerPtr pathsContainer, const TString& id, const TString& type) {
+        auto resourcePath = pathsContainer->add_resource_path();
+        resourcePath->set_id(id);
+        resourcePath->set_type(type);
+    }
+
+    template <>
+    static void AddResourcePath<nebius::iam::v1::ResourcePath*>(nebius::iam::v1::ResourcePath* pathsContainer, const TString& id, const TString& type) {
+        auto resourcePath = pathsContainer->add_path();
+        resourcePath->set_id(id);
+        Y_UNUSED(type);
+    }
+    
     template <typename TTokenRecord, typename TPathsContainerPtr>
     void addResourcePaths(const TTokenRecord& record, const TString& permission, TPathsContainerPtr pathsContainer) const {
-        auto addResourcePath = [&pathsContainer] (const TString& id, const TString& type) {
-            auto resourcePath = pathsContainer->add_resource_path();
-            resourcePath->set_id(id);
-            resourcePath->set_type(type);
-        };
-
         if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
-            addResourcePath(databaseId, "ydb.database");
+            addResourcePath(pathsContainer, databaseId, "ydb.database");
         } else if (const auto serviceAccountId = record.GetAttributeValue(permission, "service_account_id"); serviceAccountId) {
-            addResourcePath(serviceAccountId, "iam.serviceAccount");
+            addResourcePath(pathsContainer, serviceAccountId, "iam.serviceAccount");
         }
 
         if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
-            addResourcePath(folderId, "resource-manager.folder");
+            addResourcePath(pathsContainer, folderId, "resource-manager.folder");
         }
 
         if (const auto cloudId = record.GetAttributeValue(permission, "cloud_id"); cloudId) {
-            addResourcePath(cloudId, "resource-manager.cloud");
+            addResourcePath(pathsContainer, cloudId, "resource-manager.cloud");
         }
 
         if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
-            addResourcePath(gizmoId, "iam.gizmo");
+            addResourcePath(pathsContainer, gizmoId, "iam.gizmo");
         }
     }
 
@@ -416,37 +446,117 @@ private:
     }
 
     template <typename TTokenRecord>
+    void NebiusAccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
+        auto request = MakeHolder<TEvNebiusAccessServiceAuthorizeRequest>(key);
+        TStringBuilder requestForPermissions;
+        i64 i = 0;
+        for (const auto& [permissionName, permissionRecord] : record.Permissions) {
+            auto& check = (*request->Request.mutable_checks())[i];
+            check.set_iam_token(record.Ticket);
+            check.mutable_permission()->set_name(permissionName);
+            addResourcePaths(record, permissionName, check.mutable_resource_path());
+            requestForPermissions << " " << permissionName;
+            ++i;
+        }
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << requestForPermissions << ")");
+        record.ResponsesLeft++;
+        Send(NebiusAccessServiceValidator, request.Release());
+    }
+
+    template <typename TTokenRecord>
     void RequestAccessServiceAuthorization(const TString& key, TTokenRecord& record) const {
         if (AppData()->FeatureFlags.GetEnableAccessServiceBulkAuthorization()) {
             AccessServiceBulkAuthorize(key, record);
+        } else if (NebiusAccessServiceValidator) {
+            NebiusAccessServiceAuthorize(key, record);
         } else {
             AccessServiceAuthorize(key, record);
         }
     }
 
     template <typename TTokenRecord>
-    void RequestAccessServiceAuthentication(const TString& key, TTokenRecord& record) const {
-        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication");
-
+    void AccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
         auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequest>(key, record);
-
-        record.ResponsesLeft++;
         Send(AccessServiceValidatorV1, request.Release());
     }
 
+    template <typename TTokenRecord>
+    void NebiusAccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
+        auto request = MakeHolder<TEvNebiusAccessServiceAuthenticateRequest>(key);
+        request->Request.set_iam_token(record.Ticket);
+        Send(NebiusAccessServiceValidator, request.Release());
+    }
+
+    template <typename TTokenRecord>
+    void RequestAccessServiceAuthentication(const TString& key, TTokenRecord& record) const {
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication");
+        record.ResponsesLeft++;
+
+        if (NebiusAccessServiceValidator) {
+            NebiusAccessServiceAuthenticate(key, record);
+        } else {
+            AccessServiceAuthenticate(key, record);
+        }
+    }
 
     template <typename TSubject>
-    TString GetSubjectName(const TSubject& subject) {
-        switch (subject.type_case()) {
+    bool GetSubjectId(const TSubject& subjectProto, TString& subjectId) {        switch (subject.type_case()) {
         case TSubject::TypeCase::kUserAccount:
-            return subject.user_account().id() + "@" + AccessServiceDomain;
+            subjectId = subjectProto.user_account().id();
+            return true;
         case TSubject::TypeCase::kServiceAccount:
-            return subject.service_account().id() + "@" + AccessServiceDomain;
+            subjectId = subjectProto.service_account().id();
+            return true;
         case TSubject::TypeCase::kAnonymousAccount:
-            return "anonymous" "@" + AccessServiceDomain;
+            subjectId = "anonymous";
+            return true;
         default:
-            return "Unknown subject type";
+            return false;
         }
+    }
+
+     bool GetSubjectId(const nebius::iam::v1::Account& accountProto, TString& subjectId) {
+        using Account = nebius::iam::v1::Account;
+        switch (accountProto.type_case()) {
+        case Account::TypeCase::kUserAccount:
+            subjectId = accountProto.user_account().id();
+            return true;
+        case Account::TypeCase::kServiceAccount:
+            subjectId = accountProto.service_account().id();
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    template <typename TProto>
+    bool ApplySubjectName(const TProto& subjectProto, TString& subject, TString& error) {
+        subject.clear();
+        if (!GetSubjectId(subjectProto, subject)) {
+            error = "Unknown subject type";
+            return false;
+        }
+
+        if (subject.empty()) {
+            error = "Empty subject id";
+            return false;
+        }
+
+        subject += '@';
+        subject += AccessServiceDomain;
+        return true;
+    }
+
+    bool ApplySubjectName(const yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse& response, TString& subject, TString& error) {
+        return ApplySubjectName(response.subject(), subject, error);
+    }
+
+    bool ApplySubjectName(const yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse& response, TString& subject, TString& error) {
+        return ApplySubjectName(response.subject(), subject, error);
+    }
+
+    bool ApplySubjectName(const nebius::iam::v1::AuthenticateResponse& response, TString& subject, TString& error) {
+        return ApplySubjectName(response.account(), subject, error);
     }
 
     template <typename TSubjectType>
@@ -461,6 +571,29 @@ private:
         default:
             return TPermissionRecord::TTypeCase::TYPE_NOT_SET;
         }
+    }
+
+    template <>
+    typename TPermissionRecord::TTypeCase ConvertSubjectType<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>(const yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse& response) {
+        return ConvertSubjectType(response.subject().type_case());
+    }
+
+    template <>
+    typename TPermissionRecord::TTypeCase ConvertSubjectType<nebius::iam::v1::Account::TypeCase>(const nebius::iam::v1::Account::TypeCase& type) {
+        using Account = nebius::iam::v1::Account;
+        switch (type) {
+        case Account::kUserAccount:
+            return TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE;
+        case Account::kServiceAccount:
+            return TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE;
+        default:
+            return TPermissionRecord::TTypeCase::TYPE_NOT_SET;
+        }
+    }
+
+    template <>
+    typename TPermissionRecord::TTypeCase ConvertSubjectType<nebius::iam::v1::AuthenticateResponse>(const nebius::iam::v1::AuthenticateResponse& response) {
+        return ConvertSubjectType(response.account().type_case());
     }
 
     template <typename TTokenRecord>
@@ -611,6 +744,14 @@ private:
         ui64 cookie = ev->Cookie;
 
         CounterTicketsReceived->Inc();
+        if (!IsAccessKeySignatureSupported() && (signature.AccessKeyId || signature.Signature)) {
+            TEvTicketParser::TError error;
+            error.Message = "Access key signature is not supported";
+            error.Retryable = false;
+            BLOG_ERROR("Ticket " << MaskTicket(signature.AccessKeyId) << ": " << error);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
+            return;
+        }
         const auto& signature = ev->Get()->Signature;
         if (ticket.empty() && !signature.AccessKeyId) {
             TEvTicketParser::TError error;
@@ -673,6 +814,55 @@ private:
             return;
         }
         record.AuthorizeRequests.emplace_back(ev.Release());
+    }
+
+     static auto GetTokenType(TEvAccessServiceAuthenticateRequest* request) {
+        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+    }
+
+    static auto GetTokenType(TEvAccessServiceAuthorizeRequest* request) {
+        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+    }
+
+    static auto GetTokenType(TEvNebiusAccessServiceAuthenticateRequest*) {
+        return TDerived::ETokenType::AccessService; // the only supported
+    }
+
+    static auto GetTokenType(TEvNebiusAccessServiceAuthorizeRequest*) {
+        return TDerived::ETokenType::AccessService; // the only supported
+    }
+
+    template <typename TTokenRecord>
+    bool ResolveAccountName(TTokenRecord& record, const TString& key) { // Returns true when resolve request is sent
+        switch (record.SubjectType) {
+        case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
+            if (UserAccountService) {
+                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                            << " asking for UserAccount(" << record.Subject << ")");
+                THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
+                request->Token = record.Ticket;
+                request->Request.set_user_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
+                Send(UserAccountService, request.Release());
+                record.ResponsesLeft++;
+                return true;
+            }
+            break;
+        case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
+            if (ServiceAccountService) {
+                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                            << " asking for ServiceAccount(" << record.Subject << ")");
+                THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
+                request->Token = record.Ticket;
+                request->Request.set_service_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
+                Send(ServiceAccountService, request.Release());
+                record.ResponsesLeft++;
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+        return false;
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
