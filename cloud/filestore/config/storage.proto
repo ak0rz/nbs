@@ -319,4 +319,7 @@ message TStorageConfig
     // TLS node registration details.
     optional string NodeRegistrationRootCertsFile = 362;
     optional NCloud.NProto.TCertificate NodeRegistrationCert = 363;
+
+    // Number of ranges with zero compaction stats to delete per tx.
+    optional uint32 MaxDeleteZeroCompactionRangesPerTx = 364;
 }
