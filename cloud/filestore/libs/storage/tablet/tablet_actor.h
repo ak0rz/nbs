@@ -244,6 +244,8 @@ private:
 
     ui32 BackpressureErrorCount = 0;
 
+    TVector<ui32> RangesWithEmptyCompactionScore;
+
 public:
     TIndexTabletActor(
         const NActors::TActorId& owner,

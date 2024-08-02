@@ -174,7 +174,7 @@ namespace {
     xxx(NodeRegistrationToken,           TString,               "root@builtin")\
     xxx(NodeType,                        TString,               {}            )\
                                                                                \
-    xxx(MaxDeleteZeroCompactionRangesPerTx,             ui32,      10000      )\
+    xxx(MaxZeroCompactionRangesToDeletePerTx,           ui32,      10000      )\
 // FILESTORE_STORAGE_CONFIG
 
 #define FILESTORE_DECLARE_CONFIG(name, type, value)                            \

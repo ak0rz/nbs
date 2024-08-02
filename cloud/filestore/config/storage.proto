@@ -321,5 +321,5 @@ message TStorageConfig
     optional NCloud.NProto.TCertificate NodeRegistrationCert = 363;
 
     // Number of ranges with zero compaction stats to delete per tx.
-    optional uint32 MaxDeleteZeroCompactionRangesPerTx = 364;
+    optional uint32 MaxZeroCompactionRangesToDeletePerTx = 364;
 }
