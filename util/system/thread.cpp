@@ -9,6 +9,7 @@
 #include <util/generic/ylimits.h>
 #include <util/generic/yexception.h>
 #include "yassert.h"
+#include <optional>
 #include <utility>
 
 #if defined(_linux_) || defined(_android_)
@@ -350,23 +351,32 @@ TThread::TId TThread::CurrentThreadId() noexcept {
 }
 
 TThread::TId TThread::CurrentThreadNumericId() noexcept {
+    thread_local std::optional<TId> CachedId;
+    if (CachedId) {
+        return *CachedId;
+    }
 #if defined(_win_)
-    return GetCurrentThreadId();
+    CachedId = GetCurrentThreadId();
+    return *CachedId;
 #elif defined(_darwin_)
     // There is no gettid() on MacOS and SYS_gettid returns completely unrelated numbers.
     // See: http://elliotth.blogspot.com/2012/04/gettid-on-mac-os.html
     uint64_t threadId;
     pthread_threadid_np(nullptr, &threadId);
-    return threadId;
+    CachedId = threadId;
+    return *CachedId;
 #elif defined(_musl_) || defined(_bionic_)
     // both musl and android libc provide gettid() function
-    return gettid();
+    CachedId = gettid();
+    return *CachedId;
 #elif defined(_glibc_)
     #if __GLIBC_PREREQ(2, 30)
-    return gettid();
+    CachedId = gettid();
+    return *CachedId;
     #else
     // gettid() was introduced in glibc=2.30, previous versions lack neat syscall wrapper
-    return syscall(SYS_gettid);
+    CachedId = syscall(SYS_gettid);
+    return *CachedId;
     #endif
 #else
     #error "Implement me"
